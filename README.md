@@ -1,3 +1,4 @@
 # ContaNext Connector
 
-Puente auditado entre un sitio ContaNext y los servicios SaaS. No permite ejecutar comandos arbitrarios.
+Punto de integración entre un tenant ERPNext y el plano de control SaaS. La
+aplicación no comparte usuarios ni credenciales del portal con ERPNext.
