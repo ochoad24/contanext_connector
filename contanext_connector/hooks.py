@@ -22,6 +22,7 @@ doc_events = {
 		"validate": "contanext_connector.entitlements.validate_module_operation",
 	},
 	"User": {
+		"before_insert": "contanext_connector.entitlements.validate_user",
 		"validate": "contanext_connector.entitlements.validate_user",
 	},
 	"Company": {

@@ -73,7 +73,7 @@ def validate_user(doc, method: str | None = None) -> None:
 	entitlements = load_effective_entitlements()
 	if not entitlements:
 		return
-	_validate_user_limit(doc, entitlements)
+	_validate_user_limit(doc, entitlements, force_new=method == "before_insert")
 	_validate_user_roles(doc, entitlements)
 
 
@@ -195,10 +195,10 @@ def _filter_navigation(value, disabled_workspaces: set[str]):
 	return value
 
 
-def _validate_user_limit(doc, entitlements: EffectiveEntitlements) -> None:
+def _validate_user_limit(doc, entitlements: EffectiveEntitlements, force_new: bool = False) -> None:
 	if not _user_consumes(doc):
 		return
-	old = doc.get_doc_before_save() if not doc.is_new() else None
+	old = None if force_new or doc.is_new() else doc.get_doc_before_save()
 	if old and _user_consumes(old):
 		return
 	with _entitlement_lock("users"):

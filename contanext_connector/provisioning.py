@@ -176,7 +176,7 @@ def sync_entitlements(snapshot: str) -> dict[str, str]:
 	value = json.loads(contract.canonical_payload)
 	frappe.flags.in_contanext_entitlement_sync = True
 	try:
-		roles = _apply_initial_admin_roles(value)
+		roles = _apply_initial_admin_roles(value) if _configured_initial_admin(value) else []
 		drift = reconcile_roles(contract)
 	finally:
 		frappe.flags.in_contanext_entitlement_sync = False
@@ -202,6 +202,85 @@ def entitlement_status() -> dict:
 	from contanext_connector.entitlements import get_entitlement_status
 
 	return get_entitlement_status()
+
+
+def migration_inventory() -> dict:
+	"""Return a read-only, non-secret inventory for a controlled legacy migration."""
+	from contanext_connector.entitlements import MODULE_DOCTYPES, RESERVED_USERS
+
+	role_rows = frappe.db.sql(
+		"""SELECT DISTINCT hr.role FROM `tabHas Role` hr
+		JOIN `tabUser` u ON u.name=hr.parent
+		WHERE hr.parenttype='User' AND u.enabled=1 AND u.name NOT IN %(reserved)s
+		AND (u.user_type='System User' OR EXISTS (
+			SELECT 1 FROM `tabHas Role` desk_hr JOIN `tabRole` desk_role ON desk_role.name=desk_hr.role
+			WHERE desk_hr.parent=u.name AND desk_hr.parenttype='User' AND COALESCE(desk_role.desk_access,0)=1
+		)) ORDER BY hr.role""",
+		{"reserved": tuple(sorted(RESERVED_USERS))},
+		as_dict=True,
+	)
+	roles = [str(row.role) for row in role_rows]
+	role_set = set(roles)
+	modules = sorted(module for module, expected in MODULE_MANAGER_ROLES.items() if role_set & expected)
+	module_records = {}
+	for module, doctypes in MODULE_DOCTYPES.items():
+		module_records[module] = sum(int(frappe.db.count(doctype)) for doctype in doctypes if frappe.db.table_exists(doctype))
+	users = len(
+		frappe.db.sql(
+			"""SELECT u.name FROM `tabUser` u WHERE u.enabled=1 AND u.name NOT IN %(reserved)s AND
+			(u.user_type='System User' OR EXISTS (
+				SELECT 1 FROM `tabHas Role` hr JOIN `tabRole` r ON r.name=hr.role
+				WHERE hr.parent=u.name AND hr.parenttype='User' AND COALESCE(r.desk_access,0)=1
+			))""",
+			{"reserved": tuple(sorted(RESERVED_USERS))},
+		)
+	)
+	file_rows = frappe.db.sql(
+		"""SELECT COALESCE(is_private,0) AS is_private, COUNT(*) AS file_count,
+		COALESCE(SUM(COALESCE(file_size,0)),0) AS file_bytes
+		FROM `tabFile` GROUP BY COALESCE(is_private,0)""",
+		as_dict=True,
+	)
+	public_count = private_count = file_bytes = 0
+	for row in file_rows:
+		count = int(row.file_count or 0)
+		file_bytes += int(row.file_bytes or 0)
+		if int(row.is_private or 0):
+			private_count += count
+		else:
+			public_count += count
+	physical_public_count, physical_private_count, physical_bytes = 0, 0, 0
+	for is_private, path in (
+		(False, frappe.get_site_path("public", "files")),
+		(True, frappe.get_site_path("private", "files")),
+	):
+		if not os.path.isdir(path):
+			continue
+		for root, _, names in os.walk(path, followlinks=False):
+			for name in names:
+				full_path = os.path.join(root, name)
+				try:
+					stat = os.stat(full_path, follow_symlinks=False)
+				except OSError:
+					continue
+				if not os.path.isfile(full_path) or os.path.islink(full_path):
+					continue
+				physical_bytes += int(stat.st_size)
+				if is_private:
+					physical_private_count += 1
+				else:
+					physical_public_count += 1
+	return {
+		"tenant_id": frappe.local.site,
+		"users": users,
+		"companies": int(frappe.db.count("Company")),
+		"modules": modules,
+		"roles": roles,
+		"observed_module_records": module_records,
+		"public_file_count": max(public_count, physical_public_count),
+		"private_file_count": max(private_count, physical_private_count),
+		"file_bytes": max(file_bytes, physical_bytes),
+	}
 
 
 def configure_file_storage_from_stdin() -> dict[str, str]:
@@ -266,9 +345,7 @@ def apply_initial_admin_roles() -> dict[str, str]:
 
 
 def _apply_initial_admin_roles(snapshot: dict) -> list[str]:
-	admin_email = str(snapshot.get("initial_admin", {}).get("email", "")).strip().lower()
-	if not admin_email:
-		admin_email = str(frappe.db.get_default("contanext_initial_admin") or "").strip().lower()
+	admin_email = _configured_initial_admin(snapshot)
 	if not admin_email or not frappe.db.exists("User", admin_email):
 		frappe.throw("Initial administrator is unavailable")
 	modules = {str(code).strip().upper() for code in snapshot.get("configuration", {}).get("module_codes", [])}
@@ -288,3 +365,10 @@ def _apply_initial_admin_roles(snapshot: dict) -> list[str]:
 	if missing:
 		user.add_roles(*missing)
 	return sorted(roles)
+
+
+def _configured_initial_admin(snapshot: dict) -> str:
+	admin_email = str(snapshot.get("initial_admin", {}).get("email", "")).strip().lower()
+	if not admin_email:
+		admin_email = str(frappe.db.get_default("contanext_initial_admin") or "").strip().lower()
+	return admin_email
