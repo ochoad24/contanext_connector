@@ -1,0 +1,30 @@
+{
+ "actions": [],
+ "creation": "2026-10-27 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["enabled", "endpoint", "region", "bucket_name", "object_prefix", "files_quota_bytes", "reconciled_used_bytes", "last_reconciled_at", "access_key_id", "secret_access_key"],
+ "fields": [
+  {"default": "0", "fieldname": "enabled", "fieldtype": "Check", "label": "Enabled", "read_only": 1},
+  {"fieldname": "endpoint", "fieldtype": "Data", "label": "R2 Endpoint", "read_only": 1},
+  {"default": "auto", "fieldname": "region", "fieldtype": "Data", "label": "R2 Region", "read_only": 1},
+  {"fieldname": "bucket_name", "fieldtype": "Data", "label": "Bucket Name", "read_only": 1},
+  {"default": "files/", "fieldname": "object_prefix", "fieldtype": "Data", "label": "Object Prefix", "read_only": 1},
+  {"default": "0", "fieldname": "files_quota_bytes", "fieldtype": "Data", "label": "Files Quota Bytes", "read_only": 1},
+  {"default": "0", "fieldname": "reconciled_used_bytes", "fieldtype": "Data", "label": "Reconciled Used Bytes", "read_only": 1},
+  {"fieldname": "last_reconciled_at", "fieldtype": "Datetime", "label": "Last Reconciled At", "read_only": 1},
+  {"fieldname": "access_key_id", "fieldtype": "Password", "label": "Access Key ID", "read_only": 1},
+  {"fieldname": "secret_access_key", "fieldtype": "Password", "label": "Secret Access Key", "read_only": 1}
+ ],
+ "index_web_pages_for_search": 0,
+ "issingle": 1,
+ "modified": "2026-10-27 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ContaNext Connector",
+ "name": "ContaNext File Storage Settings",
+ "owner": "Administrator",
+ "permissions": [{"read": 1, "role": "System Manager"}],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
